@@ -31,6 +31,13 @@ contract Blockcharity {
 
     Organization[] public organizations;
 
+    function getOrganizations() public view returns(Organization[] memory) {
+        return(organizations);
+    }
+    function getUnregisteredOrganizations() public view returns(Organization[] memory) {
+        return(unregisteredOrganizations);
+    }
+
     struct Proposal {
         uint256 outcome;
     }
@@ -62,6 +69,7 @@ contract Blockcharity {
     }
 
     Organization[] public unregisteredOrganizations;
+
 
     function verifyOrganization(uint256 index) isStaff external {
         require(unregisteredOrganizations[index].id == 0);
