@@ -5,6 +5,7 @@ contract Blockcharity {
     //Tracking of donations
     mapping(address => uint256) public amountDonated;
     mapping(address => bool) public hasDonated;
+    address public owner;
     address[] public donors;
     struct Donation {
         address donor;
@@ -61,6 +62,16 @@ contract Blockcharity {
     modifier isStaff() {
         require(staff[msg.sender] == true, "This function is locked.");
         _;
+    }
+
+    function addStaff(address newStaff) external {
+        require(msg.sender == owner, "This function is locked.");
+        staff[newStaff] = true;
+    }
+
+    constructor() {
+        owner = msg.sender;
+        staff[msg.sender] = true;
     }
 
 
