@@ -81,6 +81,11 @@ contract Blockcharity {
 
     Organization[] public unregisteredOrganizations;
 
+    function denyOrganization(uint256 index) isStaff external {
+        Organization memory lastValue = unregisteredOrganizations[unregisteredOrganizations.length - 1];
+        unregisteredOrganizations[index] = lastValue;
+        unregisteredOrganizations.pop();
+    }
 
     function verifyOrganization(uint256 index) isStaff external {
         require(unregisteredOrganizations[index].id == 0);
