@@ -86,6 +86,10 @@ contract Blockcharity {
         require(unregisteredOrganizations[index].id == 0);
         unregisteredOrganizations[index].id = organizations.length;
         organizations.push(unregisteredOrganizations[index]);
+        Organization memory lastValue = unregisteredOrganizations[unregisteredOrganizations.length - 1];
+        unregisteredOrganizations[index] = lastValue;
+        unregisteredOrganizations.pop();
+        
     }
 
     function vote(uint256 organization) external payable {
