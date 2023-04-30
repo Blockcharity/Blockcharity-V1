@@ -7,10 +7,13 @@ contract Blockcharity {
     mapping(address => bool) public hasDonated;
     address public owner;
     address[] public donors;
+    uint256 public grantsFund = 0;
+    uint256 public weeklyFund = 0;
     struct Donation {
         address donor;
         uint256 value;
     }
+
     Donation[] public donations;
 
     receive() external payable {
@@ -19,45 +22,19 @@ contract Blockcharity {
         if (hasDonated[msg.sender] == false) {
             hasDonated[msg.sender] = true;
             donors.push(msg.sender);
-        } 
+        }
+        weeklyFund += (msg.value / 2);
+        grantsFund += (msg.value / 2);
     }
 
-    struct Organization {
-        address SendTo;
-        uint256 ftmGathered;
-        uint256 id;
-        string website;
-        string name;
-    }
-
-    Organization[] public organizations;
-
-    function getOrganizations() public view returns(Organization[] memory) {
-        return(organizations);
-    }
-    function getUnregisteredOrganizations() public view returns(Organization[] memory) {
-        return(unregisteredOrganizations);
-    }
-
-    struct Proposal {
-        uint256 outcome;
-    }
-    struct Vote {
-        bool hasVoted; //
-        uint256 orgTo; //
-        uint256 amount;
-    }
-
-    mapping(uint256 => mapping(uint256 => uint256)) public orgVotes; //
-    mapping(uint256 => mapping(address => Vote)) public votes; //
-    mapping(uint256 => address[]) public voters; //
-    mapping(uint256 => Proposal) public proposals; //
-    
-    function getVoters(uint256 week) public view returns(address[] memory) {
-        return(voters[week]); //this value cannot be retrieved unless individually
-    }
+    //Staff
 
     mapping(address => bool) staff;
+
+    constructor() {
+        owner = msg.sender;
+        staff[msg.sender] = true;
+    }
 
     modifier isStaff() {
         require(staff[msg.sender] == true, "This function is locked.");
@@ -69,68 +46,127 @@ contract Blockcharity {
         staff[newStaff] = true;
     }
 
-    constructor() {
-        owner = msg.sender;
-        staff[msg.sender] = true;
+    //Organizations
+
+    struct Organization {
+        address SendTo;
+        uint256 totalReceived;
+        uint256 id;
+        string name;
     }
 
-
-    function registerOrganization(string memory website, address sendTo, string memory name) public payable {
-         unregisteredOrganizations.push(Organization(sendTo, 0, 0, website, name));
+    struct OrgPath {
+        uint256 index;
+        uint256 class;
     }
 
-    Organization[] public unregisteredOrganizations;
+    /*
+    Class 1 = Verified = 1
+    Class 2 = Unverified = 2
+    Class 3 = Defunct or Scam = 3
+    */
+    mapping(uint256 => Organization[]) O_;
+    uint256 public numberOfOrgs = 0;
+    mapping(uint256 => OrgPath) Paths;
 
-    function denyOrganization(uint256 index) isStaff external {
-        Organization memory lastValue = unregisteredOrganizations[unregisteredOrganizations.length - 1];
-        unregisteredOrganizations[index] = lastValue;
-        unregisteredOrganizations.pop();
+    function getOrganizations() public view returns (Organization[][3] memory) {
+        return [O_[1], O_[2], O_[3]];
     }
 
-    function verifyOrganization(uint256 index) isStaff external {
-        require(unregisteredOrganizations[index].id == 0);
-        unregisteredOrganizations[index].id = organizations.length;
-        organizations.push(unregisteredOrganizations[index]);
-        Organization memory lastValue = unregisteredOrganizations[unregisteredOrganizations.length - 1];
-        unregisteredOrganizations[index] = lastValue;
-        unregisteredOrganizations.pop();
-        
+    function registerOrganization(address, string memory name) public payable {
+        Paths[numberOfOrgs] = OrgPath(O_[2].length, 2);
+        O_[2].push(Organization(msg.sender, 0, numberOfOrgs, name));
+        numberOfOrgs++;
     }
 
-    function vote(uint256 organization) external payable {
-        uint256 week = block.timestamp/604800;
-        require(msg.value > 0, "Insufficient value");
-        require(organizations[organization].SendTo != address(0x0), "That organization does not exist."); //make sure organization exists
-        require(votes[week][msg.sender].hasVoted == false, "You have already voted."); //make sure has not voted
-        votes[week][msg.sender].hasVoted = true;
-        voters[week].push(msg.sender);
-        votes[week][msg.sender].orgTo = organization;
-        votes[week][msg.sender].amount = msg.value;
-        orgVotes[week][organization] += msg.value;
+    function changeClass(uint256 id, uint256 newClass) external isStaff {
+        OrgPath storage cP = Paths[id]; //Current Path
+        require(cP.class != 0, "Organization does not exist");
+        require(1 <= newClass && newClass <= 3, "Invalid Class ID"); //Does class exist?
+        require(cP.class != newClass, "Organization is already in that class"); //Useless Tx
+        Organization storage organizationToMove = O_[cP.class][cP.index];
+        if ((O_[cP.class].length - 1) != cP.index) {
+            Organization storage lastValue = O_[cP.class][O_[cP.class].length - 1];
+            Paths[lastValue.id].index = cP.index;
+            O_[cP.class][cP.index] = lastValue;
         }
+
+        O_[cP.class].pop();
+        Paths[id] = OrgPath(O_[newClass].length, newClass);
+        O_[newClass].push(organizationToMove);
+
+    }
+
+    //Weekly Vote
+
+    function getVoters(uint256 week) public view returns (address[] memory) {
+        return (voters[week]); //this value cannot be retrieved unless individually
+    }
+
+    struct Proposal {
+        uint256 outcome;
+    }
+    struct Vote {
+        bool hasVoted;
+        uint256 orgTo;
+        uint256 amount;
+    }
+
+    mapping(uint256 => mapping(uint256 => uint256)) public orgVotes;
+    mapping(uint256 => mapping(address => Vote)) public votes;
+    mapping(uint256 => address[]) public voters;
+    mapping(uint256 => Proposal) public proposals;
+    mapping(uint256 => uint256) public winningOrganizations;
+
+    function vote(uint256 id) external payable {
+    uint256 week = block.timestamp / 604800;
+    require(msg.value > 0, "Insufficient value");
+    require(Paths[id].class == 1, "This organization does not exist, or is not verified.");
+    require(votes[week][msg.sender].hasVoted == false, "You have already voted.");
+    votes[week][msg.sender].hasVoted = true;
+    voters[week].push(msg.sender);
+    votes[week][msg.sender].orgTo = id;
+    votes[week][msg.sender].amount = msg.value;
+
+    // update the votes for the organization that received the vote
+    uint256 orgVotesCount = orgVotes[week][id];
+    orgVotes[week][id] = orgVotesCount + msg.value;
+
+    // update the winning organization if necessary
+    uint256 winningOrgId = winningOrganizations[week];
+    uint256 winningOrgVotesCount = orgVotes[week][winningOrgId];
+    if (orgVotesCount + msg.value > winningOrgVotesCount) {
+        winningOrganizations[week] = id;
+    }
+}
 
     mapping(uint256 => bool) public isExecuted;
 
     function execute(uint256 week) public {
-        require(block.timestamp/604800 > week, "Week has not passed."); 
-        require(voters[week].length > 0, "No voters.");
-        require(!isExecuted[week], "This has already been executed."); 
-        isExecuted[week] = true;
-        uint256 winningOrganization = 0;
-        for (uint256 i = 0; i < organizations.length; i++) {
-            if (orgVotes[week][i] > orgVotes[week][winningOrganization]) {
-            winningOrganization = i;
-        }
-        }
-        for (uint256 i = 0; i < voters[week].length; i++) {
-            address addr = voters[week][i];
-            uint256 value = votes[week][addr].amount;
-            require(address(this).balance >= value, "Contract balance insufficient");
-            payable(addr).transfer(value);
-        }
-        uint256 value_ = (address(this).balance * 9)/10;
-        require(address(this).balance >= value_, "Contract balance insufficient");
-        payable(organizations[winningOrganization].SendTo).transfer(value_);
-        
+    require(block.timestamp / 604800 > week, "Week has not passed.");
+    require(voters[week].length > 0, "No voters.");
+    require(!isExecuted[week], "This has already been executed.");
+    isExecuted[week] = true;
+
+    uint256 winningOrgId = winningOrganizations[week];
+    require(Paths[winningOrgId].class == 1, "Winning organization does not exist, or is not verified.");
+    uint256 value_ = (weeklyFund) / 10;
+    weeklyFund -= value_;
+    require(address(this).balance >= value_, "Contract balance insufficient");
+    payable(O_[1][Paths[winningOrgId].index].SendTo).transfer(value_);
+}
+
+    mapping(uint256 => mapping(address => bool)) claimed;
+
+    function claimFTM(uint256 week) public {
+        require(!claimed[week][msg.sender]);
+        claimed[week][msg.sender] = true;
+        uint256 value = votes[week][msg.sender].amount;
+        require(address(this).balance >= value, "Contract balance insufficient");
+        payable(msg.sender).transfer(value);
     }
+
+    //Grants
+
+    function requestGrant() public {}
 }
