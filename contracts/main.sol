@@ -2,7 +2,7 @@
 pragma solidity ^0.8.10;
 
 contract Blockcharity {
-    //Tracking of donations
+    //Tracking of donations - Done
     mapping(address => uint256) public amountDonated;
     mapping(address => bool) public hasDonated;
     address public owner;
@@ -27,7 +27,7 @@ contract Blockcharity {
         grantsFund += (msg.value / 2);
     }
 
-    //Staff
+    //Staff  - Done
 
     mapping(address => bool) staff;
 
@@ -46,17 +46,13 @@ contract Blockcharity {
         staff[newStaff] = true;
     }
 
-    //Organizations
+    //Organizations - Need Review
 
     struct Organization {
         address SendTo;
         uint256 totalReceived;
         uint256 id;
         string name;
-    }
-
-    struct OrgPath {
-        uint256 index;
         uint256 class;
     }
 
@@ -65,39 +61,28 @@ contract Blockcharity {
     Class 2 = Unverified = 2
     Class 3 = Defunct or Scam = 3
     */
-    mapping(uint256 => Organization[]) O_;
+    Organization[] public Organizations;
     uint256 public numberOfOrgs = 0;
-    mapping(uint256 => OrgPath) Paths;
 
-    function getOrganizations() public view returns (Organization[][3] memory) {
-        return [O_[1], O_[2], O_[3]];
+
+    function getOrganizations() public view returns (Organization[] memory) {
+        return Organizations;
     }
 
     function registerOrganization(address, string memory name) public payable {
-        Paths[numberOfOrgs] = OrgPath(O_[2].length, 2);
-        O_[2].push(Organization(msg.sender, 0, numberOfOrgs, name));
+        Organizations.push(Organization(msg.sender, 0, numberOfOrgs, name, 2));
         numberOfOrgs++;
     }
 
     function changeClass(uint256 id, uint256 newClass) external isStaff {
-        OrgPath storage cP = Paths[id]; //Current Path
-        require(cP.class != 0, "Organization does not exist");
+        require(Organizations[id].SendTo != address(0x0), "Organization Does Not Exist");
         require(1 <= newClass && newClass <= 3, "Invalid Class ID"); //Does class exist?
-        require(cP.class != newClass, "Organization is already in that class"); //Useless Tx
-        Organization storage organizationToMove = O_[cP.class][cP.index];
-        if ((O_[cP.class].length - 1) != cP.index) {
-            Organization storage lastValue = O_[cP.class][O_[cP.class].length - 1];
-            Paths[lastValue.id].index = cP.index;
-            O_[cP.class][cP.index] = lastValue;
-        }
-
-        O_[cP.class].pop();
-        Paths[id] = OrgPath(O_[newClass].length, newClass);
-        O_[newClass].push(organizationToMove);
+        require(Organizations[id].class != newClass, "Organization is already in that class"); //Useless Tx
+        Organizations[id].class = newClass;
 
     }
 
-    //Weekly Vote
+    //Weekly Vote - Need Review
 
     function getVoters(uint256 week) public view returns (address[] memory) {
         return (voters[week]); //this value cannot be retrieved unless individually
@@ -121,7 +106,7 @@ contract Blockcharity {
     function vote(uint256 id) external payable {
     uint256 week = block.timestamp / 604800;
     require(msg.value > 0, "Insufficient value");
-    require(Paths[id].class == 1, "This organization does not exist, or is not verified.");
+    require(Organizations[id].class == 1, "This organization does not exist, or is not verified.");
     require(votes[week][msg.sender].hasVoted == false, "You have already voted.");
     votes[week][msg.sender].hasVoted = true;
     voters[week].push(msg.sender);
@@ -149,11 +134,11 @@ contract Blockcharity {
     isExecuted[week] = true;
 
     uint256 winningOrgId = winningOrganizations[week];
-    require(Paths[winningOrgId].class == 1, "Winning organization does not exist, or is not verified.");
+    require(Organizations[winningOrgId].class == 1, "Winning organization does not exist, or is not verified.");
     uint256 value_ = (weeklyFund) / 10;
     weeklyFund -= value_;
     require(address(this).balance >= value_, "Contract balance insufficient");
-    payable(O_[1][Paths[winningOrgId].index].SendTo).transfer(value_);
+    payable(Organizations[winningOrgId].SendTo).transfer(value_);
 }
 
     mapping(uint256 => mapping(address => bool)) claimed;
@@ -166,7 +151,18 @@ contract Blockcharity {
         payable(msg.sender).transfer(value);
     }
 
+    //Donate - Done
+
+    function donate(uint256 id) public payable {
+        require(msg.value > 0);
+        require(Organizations[id].class != 3);
+        payable(Organizations[id].SendTo).transfer(msg.value);
+    }
+
     //Grants
 
     function requestGrant() public {}
+
+    //Create Vote Lock -Unfinished
+
 }
