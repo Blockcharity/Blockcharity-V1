@@ -51,7 +51,6 @@ contract Blockcharity {
     struct Organization {
         address SendTo;
         uint256 totalReceived;
-        uint256 id;
         string name;
         uint256 class;
     }
@@ -70,7 +69,7 @@ contract Blockcharity {
     }
 
     function registerOrganization(address, string memory name) public payable {
-        Organizations.push(Organization(msg.sender, 0, numberOfOrgs, name, 2));
+        Organizations.push(Organization(msg.sender, 0, name, 2));
         numberOfOrgs++;
     }
 
@@ -154,15 +153,26 @@ contract Blockcharity {
     //Donate - Done
 
     function donate(uint256 id) public payable {
-        require(msg.value > 0);
-        require(Organizations[id].class != 3);
+        require(msg.value > 0, "Cannot donate nothing");
+        require(Organizations[id].class != 3, "Organization is a scam");
         payable(Organizations[id].SendTo).transfer(msg.value);
     }
 
     //Grants
 
-    function requestGrant() public {}
+    struct Grant {
+        uint256 organizationId;
+        uint256 amount;
+        uint256 description;
+        uint256 endDate;
+    }
 
-    //Create Vote Lock -Unfinished
+    function requestGrant(uint256 id, uint256 amount_, string memory description) public {
+        require(Organizations[id].SendTo == msg.sender);
+        require(Organizations[id].class == 1);
+
+    }
+
+    //Create Vote Lock - Unfinished
 
 }
