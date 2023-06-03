@@ -7,8 +7,6 @@ contract Blockcharity {
     mapping(address => bool) public hasDonated;
     address public owner;
     address[] public donors;
-    uint256 public grantsFund = 0;
-    uint256 public weeklyFund = 0;
     struct Donation {
         address donor;
         uint256 value;
@@ -23,8 +21,6 @@ contract Blockcharity {
             hasDonated[msg.sender] = true;
             donors.push(msg.sender);
         }
-        weeklyFund += (msg.value / 2);
-        grantsFund += (msg.value / 2);
     }
 
     //Staff  - Done
@@ -34,6 +30,7 @@ contract Blockcharity {
     constructor() {
         owner = msg.sender;
         staff[msg.sender] = true;
+        inUseAmt = 0;
     }
 
     modifier isStaff() {
@@ -49,7 +46,7 @@ contract Blockcharity {
     //Organizations - Need Review
 
     struct Organization {
-        address SendTo;
+        address owner;
         uint256 totalReceived;
         string name;
         uint256 class;
@@ -74,80 +71,11 @@ contract Blockcharity {
     }
 
     function changeClass(uint256 id, uint256 newClass) external isStaff {
-        require(Organizations[id].SendTo != address(0x0), "Organization Does Not Exist");
+        require(Organizations[id].owner != address(0x0), "Organization Does Not Exist");
         require(1 <= newClass && newClass <= 3, "Invalid Class ID"); //Does class exist?
         require(Organizations[id].class != newClass, "Organization is already in that class"); //Useless Tx
         Organizations[id].class = newClass;
 
-    }
-
-    //Weekly Vote - Need Review
-
-    function getVoters(uint256 week) public view returns (address[] memory) {
-        return (voters[week]); //this value cannot be retrieved unless individually
-    }
-
-    struct Proposal {
-        uint256 outcome;
-    }
-    struct Vote {
-        bool hasVoted;
-        uint256 orgTo;
-        uint256 amount;
-    }
-
-    mapping(uint256 => mapping(uint256 => uint256)) public orgVotes;
-    mapping(uint256 => mapping(address => Vote)) public votes;
-    mapping(uint256 => address[]) public voters;
-    mapping(uint256 => Proposal) public proposals;
-    mapping(uint256 => uint256) public winningOrganizations;
-
-    function vote(uint256 id) external payable {
-    uint256 week = block.timestamp / 604800;
-    require(msg.value > 0, "Insufficient value");
-    require(Organizations[id].class == 1, "This organization does not exist, or is not verified.");
-    require(votes[week][msg.sender].hasVoted == false, "You have already voted.");
-    votes[week][msg.sender].hasVoted = true;
-    voters[week].push(msg.sender);
-    votes[week][msg.sender].orgTo = id;
-    votes[week][msg.sender].amount = msg.value;
-
-    // update the votes for the organization that received the vote
-    uint256 orgVotesCount = orgVotes[week][id];
-    orgVotes[week][id] = orgVotesCount + msg.value;
-
-    // update the winning organization if necessary
-    uint256 winningOrgId = winningOrganizations[week];
-    uint256 winningOrgVotesCount = orgVotes[week][winningOrgId];
-    if (orgVotesCount + msg.value > winningOrgVotesCount) {
-        winningOrganizations[week] = id;
-    }
-}
-
-    mapping(uint256 => bool) public isExecuted;
-
-    function execute(uint256 week) public {
-    require(block.timestamp / 604800 > week, "Week has not passed.");
-    require(voters[week].length > 0, "No voters.");
-    require(!isExecuted[week], "This has already been executed.");
-    isExecuted[week] = true;
-
-    uint256 winningOrgId = winningOrganizations[week];
-    require(Organizations[winningOrgId].class == 1, "Winning organization does not exist, or is not verified.");
-    uint256 value_ = (weeklyFund) / 10;
-    weeklyFund -= value_;
-    require(address(this).balance >= value_, "Contract balance insufficient");
-    payable(Organizations[winningOrgId].SendTo).transfer(value_);
-}
-
-    mapping(uint256 => mapping(address => bool)) claimed;
-
-    function claimFTM(uint256 week) public {
-        require(!claimed[week][msg.sender]);
-        claimed[week][msg.sender] = true;
-        uint256 value = votes[week][msg.sender].amount;
-        require(address(this).balance >= value, "Contract balance insufficient");
-        payable(msg.sender).transfer(value);
     }
 
     //Donate - Done
@@ -155,24 +83,60 @@ contract Blockcharity {
     function donate(uint256 id) public payable {
         require(msg.value > 0, "Cannot donate nothing");
         require(Organizations[id].class != 3, "Organization is a scam");
-        payable(Organizations[id].SendTo).transfer(msg.value);
+        payable(Organizations[id].owner).transfer(msg.value);
     }
 
     //Grants
 
+    uint256 public inUseAmt;
+
     struct Grant {
         uint256 organizationId;
         uint256 amount;
-        uint256 description;
+        string description;
         uint256 endDate;
     }
 
-    function requestGrant(uint256 id, uint256 amount_, string memory description) public {
-        require(Organizations[id].SendTo == msg.sender);
-        require(Organizations[id].class == 1);
+    Grant[] public grants;
 
+    function requestGrant(uint256 id, uint256 amount_, string memory description_) public {
+        require(Organizations[id].owner == msg.sender); //Sender is owner
+        require(Organizations[id].class == 1); //Verified
+        require((address(this).balance - inUseAmt) / 10 >= amount_); //Cannot request too much
+        inUseAmt += amount_;
+        grants.push(Grant(id, amount_, description_, block.timestamp + 1 weeks));
     }
 
     //Create Vote Lock - Unfinished
 
+    struct Lock {
+        uint256 end;
+        uint256 value;
+    }
+
+    mapping(address => Lock) Locks;
+
+    function createLock(uint256 end_) public payable {
+        require(msg.value > 0);
+        require(Locks[msg.sender].value == 0);
+        require(block.timestamp < end_);
+        Locks[msg.sender].end = end_;
+        Locks[msg.sender].value = msg.value;
+    }
+    function claimLock() public {
+        require(Locks[msg.sender].end <= block.timestamp);
+        require(Locks[msg.sender].value != 0);
+        uint256 amtToSend = Locks[msg.sender].value;
+        Locks[msg.sender].value = 0;
+        Locks[msg.sender].end = 0;
+        payable(msg.sender).transfer(amtToSend);
+    }
+
+    function addToLock() public payable {
+        require(msg.value > 0);
+        require(Locks[msg.sender].end != 0);
+        require(Locks[msg.sender].value != 0);
+        require(block.timestamp < Locks[msg.sender].end);
+        Locks[msg.sender].value += msg.value;
+    }
 }
