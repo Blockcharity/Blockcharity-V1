@@ -98,13 +98,32 @@ contract Blockcharity {
     }
 
     Grant[] public grants;
+    
+    mapping(uint256 => uint256) public votesForYes;
+    mapping(uint256 => uint256) public votesForNo;
+    mapping(uint256 => mapping(address => bool)) public hasVoted;
 
     function requestGrant(uint256 id, uint256 amount_, string memory description_) public {
         require(Organizations[id].owner == msg.sender); //Sender is owner
         require(Organizations[id].class == 1); //Verified
         require((address(this).balance - inUseAmt) / 10 >= amount_); //Cannot request too much
         inUseAmt += amount_;
+        votesForYes[grants.length] = 0;
+        votesForNo[grants.length] = 0;
         grants.push(Grant(id, amount_, description_, block.timestamp + 1 weeks));
+    }
+
+    function vote(uint256 index, bool vote) public {
+        require(grants[index].endDate != 0, "Not valid proposal");
+        require(hasVoted[index][msg.sender] == false, "Already voted");
+        require(Locks[msg.sender].value != 0, "No voting power");
+        require(grants[index].endDate > block.timestamp, "Proposal has ended");
+        hasVoted[index][msg.sender] = true;
+        if (vote == true) {
+            votesForYes[index] += Locks[msg.sender].value;
+        } else {
+            votesForNo[index] += Locks[msg.sender].value;
+        }
     }
 
     //Create Vote Lock - Unfinished
